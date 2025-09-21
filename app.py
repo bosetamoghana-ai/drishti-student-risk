@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # =========================
 # Page Config
@@ -8,7 +7,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Project Drishti", layout="wide")
 
 # =========================
-# Custom Styling
+# Custom Styling (small)
 # =========================
 st.markdown("""
     <style>
@@ -22,13 +21,26 @@ st.markdown("""
     h1, h2, h3 {
         color: #004080;
     }
+    table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+    th, td {
+        padding: 6px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # =========================
 # Sidebar
 # =========================
-st.sidebar.image("logo.png", width=120)  # upload logo.png to your repo
+try:
+    st.sidebar.image("logo.png", width=120)  # if logo.png not present, this won't crash
+except Exception:
+    st.sidebar.write("")  # ignore
+
 st.sidebar.title("Navigation")
 page = st.sidebar.radio("Go to", ["Dashboard", "Upload Data", "About"])
 
@@ -67,45 +79,51 @@ elif page == "Dashboard":
     if "data" not in st.session_state:
         st.warning("⚠️ Please upload student data first from the sidebar.")
     else:
-        df = st.session_state["data"]
+        df = st.session_state["data"].copy()
 
         required_cols = ["StudentID","Attendance","Marks","FeesDue"]
         missing = [c for c in required_cols if c not in df.columns]
         if missing:
             st.error(f"Missing columns: {missing}. Please upload correct file.")
         else:
-            # Calculate Risk Score
+            # === Calculate Risk Score (simple, transparent) ===
             df["FeesDeduction"] = df["FeesDue"] * 20
             df["RiskScore"] = 100 - (0.4*df["Attendance"] + 0.4*df["Marks"] + df["FeesDeduction"])
             df["RiskScore"] = df["RiskScore"].clip(lower=0).round(1)
 
-            st.subheader("📋 Student Risk Scores")
-
-            def color_risk(val):
-                if val >= 75:
-                    return "background-color: red; color: white; font-weight: bold;"
-                elif val >= 50:
-                    return "background-color: orange; color: black; font-weight: bold;"
+            # === Create colored badge HTML for risk ===
+            def risk_badge_html(score):
+                if score >= 75:
+                    color = "#d9534f"  # red
+                    text = "HIGH"
+                elif score >= 50:
+                    color = "#f0ad4e"  # orange
+                    text = "MEDIUM"
                 else:
-                    return "background-color: green; color: white; font-weight: bold;"
+                    color = "#5cb85c"  # green
+                    text = "LOW"
+                return f'<div style="background:{color};color:white;padding:6px;border-radius:6px;text-align:center;font-weight:bold;">{text} ({score})</div>'
 
-            styled = df[["StudentID","Attendance","Marks","FeesDue","RiskScore"]].style.applymap(color_risk, subset=["RiskScore"])
-            st.dataframe(styled, use_container_width=True)
+            df_display = df[["StudentID","Attendance","Marks","FeesDue","RiskScore"]].copy()
+            df_display["Risk"] = df_display["RiskScore"].apply(lambda s: risk_badge_html(s))
 
-            # =========================
-            # Chart: Risk Distribution
-            # =========================
+            # === Convert to HTML table so colored badges render ===
+            html_table = df_display.to_html(escape=False, index=False)
+            st.subheader("📋 Student Risk Scores")
+            st.markdown(html_table, unsafe_allow_html=True)
+
+            # === Risk distribution (bar chart using streamlit, no extra libs) ===
             st.subheader("📊 Risk Distribution")
+            high = int((df["RiskScore"] >= 75).sum())
+            medium = int(((df["RiskScore"] >= 50) & (df["RiskScore"] < 75)).sum())
+            low = int((df["RiskScore"] < 50).sum())
 
-            high = (df["RiskScore"] >= 75).sum()
-            medium = ((df["RiskScore"] >= 50) & (df["RiskScore"] < 75)).sum()
-            low = (df["RiskScore"] < 50).sum()
+            counts = pd.DataFrame({
+                "Risk": ["High Risk","Medium Risk","Low Risk"],
+                "Count": [high, medium, low]
+            }).set_index("Risk")
 
-            fig, ax = plt.subplots()
-            ax.bar(["High Risk", "Medium Risk", "Low Risk"], [high, medium, low], color=["red", "orange", "green"])
-            ax.set_title("Risk Distribution of Students")
-            ax.set_ylabel("Number of Students")
-            st.pyplot(fig)
+            st.bar_chart(counts)
 
 # =========================
 # About Page
@@ -113,11 +131,10 @@ elif page == "Dashboard":
 elif page == "About":
     st.header("ℹ️ About Project Drishti")
     st.markdown("""
-    **Drishti** is an AI-powered early warning system for schools and colleges.  
-    It unifies student data and generates a real-time **Student at Risk (StAR) score**.  
+    **Drishti** is an early warning system for schools/colleges.  
+    It unifies student data and shows real-time **Student at Risk (StAR) scores**.
 
-    ✅ Moves intervention from **reactive** → **proactive**  
-    ✅ Provides a **single source of truth** for student data  
-    ✅ Built on **open-source** (zero-cost for institutions)  
-    ✅ Includes **Explainable AI** (transparent scoring logic)  
+    - Shows **why** a student is at risk (attendance/marks/fees)
+    - Easy file upload for non-tech users
+    - No-cost stack: Streamlit + simple CSV/Excel files
     """)
