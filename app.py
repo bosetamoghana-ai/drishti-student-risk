@@ -7,47 +7,53 @@ import pandas as pd
 st.set_page_config(page_title="Project Drishti", layout="wide")
 
 # =========================
-# Custom Styling (small)
+# Custom Theme Styling
 # =========================
 st.markdown("""
     <style>
+    /* Whole page background */
     .reportview-container {
-        background: #f9f9f9;
+        background-color: #f4f8fb;
     }
-    .sidebar .sidebar-content {
-        background: #004080;
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #002b5c; /* Dark blue */
         color: white;
     }
+
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] span {
+        color: white !important;
+    }
+
+    /* Main headers */
     h1, h2, h3 {
-        color: #004080;
+        color: #002b5c;
     }
-    table {
-        border-collapse: collapse;
-        width: 100%;
-    }
-    th, td {
-        padding: 6px;
-        text-align: left;
-        border-bottom: 1px solid #ddd;
+
+    /* Dataframe table font */
+    .stDataFrame {
+        font-size: 14px;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# Sidebar
+# Sidebar with Logo
 # =========================
 try:
-    st.sidebar.image("logo.png", width=120)  # if logo.png not present, this won't crash
+    st.sidebar.image("logo.png", width=150)  # Upload this file to repo root
 except Exception:
-    st.sidebar.write("")  # ignore
+    st.sidebar.markdown("**Project Drishti**")
 
 st.sidebar.title("Navigation")
 page = st.sidebar.radio("Go to", ["Dashboard", "Upload Data", "About"])
 
 # =========================
-# App Title & Intro
+# Title
 # =========================
-st.title("📊 Project Drishti – Student Success Early Warning System")
+st.title("🏫 Project Drishti – Student Success Early Warning System")
 st.markdown("Helping educators move from **reactive** to **proactive** mentoring")
 
 # =========================
@@ -64,10 +70,10 @@ if page == "Upload Data":
             else:
                 df = pd.read_csv(uploaded_file)
 
-            st.success(f"Loaded file with {df.shape[0]} rows and {df.shape[1]} columns.")
+            st.success(f"✅ Loaded file with {df.shape[0]} rows and {df.shape[1]} columns.")
             st.write("Here is a sample of your data:")
             st.dataframe(df.head())
-            st.session_state["data"] = df  # store for other pages
+            st.session_state["data"] = df
 
         except Exception as e:
             st.error(f"Error reading file: {e}")
@@ -86,44 +92,39 @@ elif page == "Dashboard":
         if missing:
             st.error(f"Missing columns: {missing}. Please upload correct file.")
         else:
-            # === Calculate Risk Score (simple, transparent) ===
+            # === Risk Score Calculation ===
             df["FeesDeduction"] = df["FeesDue"] * 20
             df["RiskScore"] = 100 - (0.4*df["Attendance"] + 0.4*df["Marks"] + df["FeesDeduction"])
             df["RiskScore"] = df["RiskScore"].clip(lower=0).round(1)
 
-            # === Create colored badge HTML for risk ===
-            def risk_badge_html(score):
+            # === Assign Risk Levels ===
+            def risk_level(score):
                 if score >= 75:
-                    color = "#d9534f"  # red
-                    text = "HIGH"
+                    return "High Risk"
                 elif score >= 50:
-                    color = "#f0ad4e"  # orange
-                    text = "MEDIUM"
+                    return "Medium Risk"
                 else:
-                    color = "#5cb85c"  # green
-                    text = "LOW"
-                return f'<div style="background:{color};color:white;padding:6px;border-radius:6px;text-align:center;font-weight:bold;">{text} ({score})</div>'
+                    return "Low Risk"
 
-            df_display = df[["StudentID","Attendance","Marks","FeesDue","RiskScore"]].copy()
-            df_display["Risk"] = df_display["RiskScore"].apply(lambda s: risk_badge_html(s))
+            df["Risk"] = df["RiskScore"].apply(risk_level)
 
-            # === Convert to HTML table so colored badges render ===
-            html_table = df_display.to_html(escape=False, index=False)
+            # === Color-coded Dataframe ===
+            def highlight_risk(val):
+                if val == "High Risk":
+                    return "background-color: red; color: white;"
+                elif val == "Medium Risk":
+                    return "background-color: orange; color: black;"
+                elif val == "Low Risk":
+                    return "background-color: lightgreen; color: black;"
+                return ""
+
             st.subheader("📋 Student Risk Scores")
-            st.markdown(html_table, unsafe_allow_html=True)
+            st.dataframe(df.style.applymap(highlight_risk, subset=["Risk"]))
 
-            # === Risk distribution (bar chart using streamlit, no extra libs) ===
+            # === Risk Distribution Chart ===
             st.subheader("📊 Risk Distribution")
-            high = int((df["RiskScore"] >= 75).sum())
-            medium = int(((df["RiskScore"] >= 50) & (df["RiskScore"] < 75)).sum())
-            low = int((df["RiskScore"] < 50).sum())
-
-            counts = pd.DataFrame({
-                "Risk": ["High Risk","Medium Risk","Low Risk"],
-                "Count": [high, medium, low]
-            }).set_index("Risk")
-
-            st.bar_chart(counts)
+            risk_counts = df["Risk"].value_counts()
+            st.bar_chart(risk_counts)
 
 # =========================
 # About Page
@@ -134,7 +135,11 @@ elif page == "About":
     **Drishti** is an early warning system for schools/colleges.  
     It unifies student data and shows real-time **Student at Risk (StAR) scores**.
 
-    - Shows **why** a student is at risk (attendance/marks/fees)
-    - Easy file upload for non-tech users
-    - No-cost stack: Streamlit + simple CSV/Excel files
+    ### Features
+    - **High Risk** students = 🔴 Red
+    - **Medium Risk** students = 🟠 Orange
+    - **Low Risk** students = 🟢 Green
+    - Upload Excel/CSV files directly
+    - Easy, intuitive portal look
     """)
+
